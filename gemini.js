@@ -1,80 +1,135 @@
 import axios from "axios";
 
-const geminiResponse = async (command,assistantName,userName) => {
+const geminiResponse = async (command, assistantName, userName) => {
   try {
     const apiUrl = process.env.GEMINI_API_URL;
     const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (!apiUrl || !apiKey) {
+      throw new Error("API configuration missing");
+    }
+
     const prompt = `You are a Virtual Assistant named ${assistantName} created by ${userName}.
     
-    You are not Google.You will now behave like a voice-enabled assistant.
-    Your task is to understand the user's natural language input and respond with a JSON object like these:
-    { 
-      "type": "general" | "google-search" | "youtube-search" | "youtube-play" |
+You are not Google. You will now behave like a voice-enabled assistant.
+Your task is to understand the user's natural language input and respond with a JSON object.
+
+RESPONSE FORMAT:
+{
+  "type": "general" | "google-search" | "youtube-search" | "youtube-play" |
           "calculator-open" | "instagram-open" | "facebook-open" | "twitter-open" |
           "linkedin-open" | "weather-show" | "get-time" | "get-date" | "get-day" |
           "get-month" | "get-year" | "alarm-set" | "reminder-set" | "joke-tell" |
           "news-show" | "translate-text" | "unit-convert" | "currency-convert" |
           "open-app" | "call-contact" | "send-message" | "play-music" | "stop-music" |
-          "pause-music" | "resume-music" | "note-create" | "note-read",
-      "userInput" : "<Original User input>" {only remove your name from userinput if exists}
-       and agar kisi ne google ya youtube pe kuch search karne ko bola hai to userinput me only
-       vo search wala text jaye,
-      "response": "<short voice-friendly spoken response, e.g., 'Sure, opening calculator', 'Here’s what I found', 'It’s currently 3 PM', 'Playing it now'>",
-    } 
-       
-    Instructions:
-    - "type": determine the intent of the user.
-    - "userinput": Original sentance the user spoke.
-    - "response": A short voice friendly reply, e.g.,"Sure, "playing it now" , 
-                  "here's what i found" , "today is tuesday", etc.
-                  
-    Type Meanings:
+          "pause-music" | "resume-music" | "note-create" | "note-read" | "volume-up" |
+          "volume-down" | "brightness-up" | "brightness-down" | "wifi-toggle" |
+          "bluetooth-toggle" | "camera-open" | "gallery-open" | "timer-set" |
+          "find-phone" | "take-screenshot" | "system-info",
+  "userInput": "<Cleaned user input>",
+  "response": "<Short, natural, voice-friendly response>",
+  "additionalData": {
+    "searchQuery": "<if search type, extracted query>",
+    "targetApp": "<if open-app, app name>",
+    "contactName": "<if call/send-message, contact name>",
+    "messageText": "<if send-message, message content>",
+    "alarmTime": "<if alarm-set, time>",
+    "reminderText": "<if reminder-set, reminder content>",
+    "translationText": "<if translate-text, text to translate>",
+    "targetLanguage": "<if translate-text, target language>",
+    "amount": "<if currency-convert, amount>",
+    "fromCurrency": "<if currency-convert, source currency>",
+    "toCurrency": "<if currency-convert, target currency>",
+    "noteContent": "<if note-create, note content>"
+  }
+}
 
-    -"general": "If it's a factual or informational question. aur agar koi aisa question puchta he jiska answer tumhe pata he usko bhi general ki category me rakh do and bas short me answer dena."
-    -"google-search": "If the user wants to search something on Google.",
-    -"youtube-search": "If the user wants to search something on YouTube.",
-    -"youtube-play": "If the user wants to directly play a video or a song.",
-    -"calculator-open": "If the user wants to open a calculator.",
-    -"instagram-open": "If the user wants to open Instagram.",
-    -"facebook-open": "If the user wants to open Facebook.",
-    -"twitter-open": "If the user wants to open Twitter.",
-    -"linkedin-open": "If the user wants to open LinkedIn.",
-    -"weather-show": "If the user wants to know the weather.",
-    - "get-time": "If the user asks for the current time.",
-    -"get-date": "If the user asks for the current date.",
-    -"get-day": "If the user asks for the current day of the week.",
-    -"get-month": "If the user asks for the current month.",
-    -"get-year": "If the user asks for the current year.",
-    -"alarm-set": "If the user wants to set an alarm.",
-    -"reminder-set": "If the user wants to set a reminder.",
-    -"joke-tell": "If the user wants to hear a joke.",
-    -"news-show": "If the user wants the latest news.",
-    -"translate-text": "If the user wants to translate text.",
-    -"unit-convert": "If the user wants to convert units.",
-    -"currency-convert": "If the user wants to convert currency.",
-    -"open-app": "If the user wants to open any application.",
-    -"call-contact": "If the user wants to call a contact.",
-    -"send-message": "If the user wants to send a message.",
-    -"play-music": "If the user wants to play music.",
-    -"stop-music": "If the user wants to stop music.",
-    -"pause-music": "If the user wants to pause music.",
-    -"resume-music": "If the user wants to resume music.",
-    -"note-create": "If the user wants to create a note.",
-    -"note-read": "If the user wants to read a note."
+TYPE CATEGORIES:
 
+INFORMATIONAL:
+- "general": General questions, facts, explanations, definitions
+- "get-time": Current time requests
+- "get-date": Current date requests  
+- "get-day": Day of the week
+- "get-month": Current month
+- "get-year": Current year
+- "weather-show": Weather information
+- "news-show": Latest news
+- "joke-tell": Tell a joke
 
-    Important:
-    - use "${userName}" agar koi puche tumhe kisne banaya
-    - only respond with the JSON object, nothing else.
+SEARCH & MEDIA:
+- "google-search": Search on Google
+- "youtube-search": Search on YouTube
+- "youtube-play": Play specific video/song
+- "play-music": Play music
+- "pause-music": Pause music
+- "stop-music": Stop music
+- "resume-music": Resume music
 
-    now your userInput- ${command}
+APPLICATIONS:
+- "calculator-open": Open calculator
+- "instagram-open": Open Instagram
+- "facebook-open": Open Facebook
+- "twitter-open": Open Twitter
+- "linkedin-open": Open LinkedIn
+- "camera-open": Open camera
+- "gallery-open": Open gallery
+- "open-app": Open any other application
 
-    `;
+PRODUCTIVITY:
+- "alarm-set": Set alarm with time
+- "reminder-set": Set reminder
+- "timer-set": Set timer
+- "note-create": Create note
+- "note-read": Read notes
+- "translate-text": Translate text
+- "unit-convert": Convert units
+- "currency-convert": Convert currency
 
-    // ✅ Append the key as a query param
+COMMUNICATION:
+- "call-contact": Call a contact
+- "send-message": Send message to contact
+
+SYSTEM CONTROLS:
+- "volume-up": Increase volume
+- "volume-down": Decrease volume
+- "brightness-up": Increase brightness
+- "brightness-down": Decrease brightness
+- "wifi-toggle": Toggle WiFi
+- "bluetooth-toggle": Toggle Bluetooth
+- "find-phone": Find my phone
+- "take-screenshot": Take screenshot
+- "system-info": Show system information
+
+INSTRUCTIONS:
+1. Analyze the user's intent carefully
+2. For search types, extract only the search query in userInput
+3. Remove assistant name from userInput if present
+4. Response should be short, natural and voice-friendly
+5. Populate additionalData fields when relevant
+6. If user asks about your creator, respond with "${userName}"
+7. For factual questions you know, use "general" type with direct answer
+8. For complex queries requiring web search, use appropriate search type
+
+VOICE RESPONSE EXAMPLES:
+- "Sure, opening calculator for you"
+- "Searching for the latest news"
+- "Playing your favorite music"
+- "Setting alarm for 7 AM tomorrow"
+- "It's currently 3:45 PM"
+- "Today is Wednesday, October 25th"
+- "Here's a joke for you: Why don't scientists trust atoms? Because they make up everything!"
+- "The weather today is sunny with a high of 75 degrees"
+- "Calling John on speakerphone"
+- "Sending message to mom: I'll be home soon"
+
+Now process this user input: "${command}"
+
+Respond ONLY with the JSON object, no additional text.`;
+
     const fullUrl = `${apiUrl}?key=${apiKey}`;
 
-    const result = await axios.post(fullUrl, {
+    const response = await axios.post(fullUrl, {
       contents: [
         {
           parts: [
@@ -84,11 +139,45 @@ const geminiResponse = async (command,assistantName,userName) => {
           ],
         },
       ],
+    }, {
+      timeout: 10000, // 10 second timeout
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
 
-    return result.data.candidates[0].content.parts[0].text
+    if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      throw new Error("Invalid response format from Gemini API");
+    }
+
+    const responseText = response.data.candidates[0].content.parts[0].text;
+    
+    // Clean the response - remove markdown code blocks if present
+    const cleanedResponse = responseText.replace(/```json\n?|\n?```/g, '').trim();
+    
+    try {
+      return JSON.parse(cleanedResponse);
+    } catch (parseError) {
+      console.error("JSON Parse Error:", parseError);
+      // Fallback response if JSON parsing fails
+      return {
+        type: "general",
+        userInput: command,
+        response: "I encountered an issue processing your request. Please try again.",
+        additionalData: {}
+      };
+    }
+
   } catch (error) {
     console.error("Gemini API Error:", error.response?.data || error.message);
+    
+    // Return a user-friendly error response
+    return {
+      type: "general",
+      userInput: command,
+      response: "I'm having trouble connecting right now. Please check your internet connection and try again.",
+      additionalData: {}
+    };
   }
 };
 
