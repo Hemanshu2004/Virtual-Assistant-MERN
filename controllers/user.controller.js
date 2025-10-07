@@ -3,15 +3,14 @@ import { uploadOnCloudinary } from "../config/cloudinary.js";
 import geminiResponse from "../gemini.js";
 import moment from "moment";
 
-// ✅ Get current logged-in user
+// -----------------------------
+// GET CURRENT LOGGED-IN USER
+// -----------------------------
 export const getCurrentUser = async (req, res) => {
   try {
     const userId = req.userId;
-
     if (!userId) {
-      return res
-        .status(401)
-        .json({ message: "Unauthorized: no user ID found" });
+      return res.status(401).json({ message: "Unauthorized: no user ID found" });
     }
 
     const user = await User.findById(userId).select("-password");
@@ -22,20 +21,19 @@ export const getCurrentUser = async (req, res) => {
     return res.status(200).json({ success: true, user });
   } catch (error) {
     console.error("getCurrentUser error:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error while fetching current user" });
+    return res.status(500).json({ message: "Server error while fetching current user" });
   }
 };
 
-// ✅ Update user avatar
+// -----------------------------
+// UPDATE USER AVATAR
+// -----------------------------
 export const updateAvatar = async (req, res) => {
   try {
     const { avatarName, imageUrl } = req.body;
     let avatarImage;
 
     if (req.file) {
-      // Upload file to Cloudinary
       const uploadResult = await uploadOnCloudinary(req.file.path);
       avatarImage = uploadResult?.url;
     } else {
@@ -55,16 +53,19 @@ export const updateAvatar = async (req, res) => {
     return res.status(200).json({ success: true, user });
   } catch (error) {
     console.error("updateAvatar error:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error while updating avatar" });
+    return res.status(500).json({ message: "Server error while updating avatar" });
   }
 };
 
-// ✅ Ask assistant
+// -----------------------------
+// ASK ASSISTANT
+// -----------------------------
 export const askToAssistant = async (req, res) => {
   try {
     const { command } = req.body;
+    if (!command || command.trim() === "") {
+      return res.status(400).json({ response: "Command cannot be empty." });
+    }
 
     const user = await User.findById(req.userId);
     if (!user) {
@@ -78,29 +79,23 @@ export const askToAssistant = async (req, res) => {
     const userName = user.name;
     const assistantName = user.assistantName;
 
-    // Call Gemini
-    const result = await geminiResponse(command, assistantName, userName);
+    // Call Gemini safely
+    const gemResult = await geminiResponse(command, assistantName, userName);
 
-    // Extract JSON from result
-    let gemResult;
-    try {
-      const jsonMatch = result.match(/{[\s\S]*}/);
-      if (!jsonMatch) {
-        return res
-          .status(400)
-          .json({ response: "Sorry, I can't understand that." });
-      }
-      gemResult = JSON.parse(jsonMatch[0]);
-      console.log("Gemini result:", gemResult);
-    } catch (err) {
-      return res
-        .status(400)
-        .json({ response: "Invalid response format from Gemini." });
+    console.log("Gemini raw response:", gemResult);
+
+    // Validate result
+    if (!gemResult || !gemResult.type || !gemResult.response) {
+      return res.status(500).json({
+        type: "general",
+        userInput: command,
+        response: "Sorry, the assistant couldn't process that.",
+      });
     }
 
     const { type, userInput, response } = gemResult;
 
-    // Handle command types
+    // Handle date/time/day/month commands locally
     switch (type) {
       case "get-date":
         return res.json({
@@ -130,7 +125,7 @@ export const askToAssistant = async (req, res) => {
           response: `Current month is ${moment().format("MMMM")}`,
         });
 
-      // ✅ General intent types
+      // General commands (searches, social, media, etc.)
       case "google-search":
       case "youtube-search":
       case "youtube-play":
@@ -160,12 +155,18 @@ export const askToAssistant = async (req, res) => {
         return res.json({ type, userInput, response });
 
       default:
-        return res
-          .status(400)
-          .json({ response: "I didn't understand that command." });
+        return res.status(400).json({
+          type: "general",
+          userInput: command,
+          response: "I didn't understand that command.",
+        });
     }
   } catch (error) {
     console.error("askToAssistant error:", error);
-    return res.status(500).json({ response: "Internal server error." });
+    return res.status(500).json({
+      type: "general",
+      userInput: req.body.command || "",
+      response: "Internal server error while processing your command.",
+    });
   }
 };
